@@ -39,6 +39,18 @@ endfunction
 function! GetCppIndent()
     let prev_line = prevnonblank(v:lnum - 1)
 
+    " The content of a namespace is not indented
+    "
+    " namespace {
+    " const int foo = 10;
+    " }
+    " cinoptions=nN does not effect in vim 7.2 or earlier
+    if v:version < 703
+        if getline(prev_line) =~# '\v^\s*namespace\s*[^\{]*\{\s*'
+            return indent(prev_line)
+        endif
+    endif
+
     " Four spaces for constructor initializer lists
     "
     " Foo::Foo() : foo(1), bar(2), buzz(3) {
@@ -78,7 +90,6 @@ function! GetCppIndent()
     if getline(v:lnum) =~# '\v^\s*\}$'
         return indent(prev_line) - &l:shiftwidth
     endif
-
 
     " apply cindent other indent
     return cindent(v:lnum)
