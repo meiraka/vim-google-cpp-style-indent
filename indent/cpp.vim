@@ -36,6 +36,46 @@ function! FindBefore(pattern, lineno)
     return findline
 endfunction
 
+function! FindLeftPair(left, right, lineno, pos)
+    let findline = a:lineno
+    let indent = 1
+    let is_firstline = 1
+    while findline > 1
+        let line = getline(findline)
+        let word_pos = strlen(line) - 1
+        if is_firstline == 1
+            let word_pos = a:pos
+            let is_firstline = 0
+        endif
+        while word_pos > -1
+            echom line[word_pos]
+            if line[word_pos] == a:right
+                let indent = indent + 1
+            endif
+            if line[word_pos] == a:left
+                let indent = indent - 1
+            endif
+            if indent == 0
+                return [findline, word_pos + 1]
+            endif
+            let word_pos = word_pos - 1
+        endwhile
+        let findline = prevnonblank(findline - 1)
+    endwhile
+    return [-1, -1]
+endfunction
+
+function! FindConstructorLineBefore(leftcurlybrace_line)
+    let before_line = prevnonblank(a:leftcurlybrace_line - 1)
+    let constructor_line = FindBefore('\v\s*[^:]+::[^\)]*\)\s*$', before_line)
+    let rightcurlybrace_line = FindBefore('{', before_line)
+    " check prev_line left brace is constructor's brace
+    if constructor_line > rightcurlybrace_line
+        return constructor_line
+    endif
+    return -1
+endfunction
+
 function! GetCppIndent()
     let prev_line = prevnonblank(v:lnum - 1)
 
@@ -76,19 +116,21 @@ function! GetCppIndent()
 
     " end of initializer
     if getline(prev_line) =~# '\v[^\)]+\)\s*\{\s*$'
-        " find fist constructor line 
-        let before_line = prevnonblank(prev_line - 1)
-        let constructor_line = FindBefore('\v\s*[^:]+::[^\)]*\)\s*$', before_line)
-        let rightcurlybrace_line = FindBefore('{', before_line)
-        " check prev_line left brace is constructor's brace
-        if constructor_line > rightcurlybrace_line
+        let constructor_line = FindConstructorLineBefore(prev_line)
+        if constructor_line != -1
             return indent(constructor_line) + &l:shiftwidth
         endif
     endif
 
     " end of constructor
     if getline(v:lnum) =~# '\v^\s*\}$'
-        return indent(prev_line) - &l:shiftwidth
+        let leftcurlybrace = FindLeftPair('{', '}', v:lnum - 1, strlen(getline(v:lnum) - 1))[0]
+        if leftcurlybrace != -1
+            let constructor_line = FindConstructorLineBefore(leftcurlybrace)
+            if constructor_line != -1
+                return indent(constructor_line)
+            endif
+        endif
     endif
 
     " apply cindent other indent
